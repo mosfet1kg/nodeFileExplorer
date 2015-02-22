@@ -1,5 +1,4 @@
 var express = require('express'),
-    request = require('request'),
     fs = require('fs'),
     path = require('path'),
     app = express();
