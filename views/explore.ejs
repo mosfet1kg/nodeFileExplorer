@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <script src="/js/jquery-1.11.3.min.js"></script>
+    <!-- Latest compiled and minified CSS -->
+    <script src="http://code.jquery.com/jquery-1.11.3.min.js"></script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
+
+    <!-- Latest compiled and minified JavaScript -->
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+</head>
+<body>
+
+<div class="container bs-docs-container">
+    <div class="row">
+        <div class="col-md-9">
+            <h1 class="page-header">KSA File Explorer</h1>
+            <table class="table table-striped">
+                <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Modified Date</th>
+                    <th>Size</th>
+                    <th>Kind</th>
+                    <th>Others</th>
+                </tr>
+                </thead>
+                <tbody id="contents">
+                <% list.forEach(function(record){ %>
+                    <tr>
+                        <td class="fileName" value="<%=record.link%>">
+                            <% if( record.isFolder ){ %>
+                                <a href="/get/<%= record.link %>">[<%=record.name%>]</a>
+                            <% }else{ %>
+                                <a href="/down/<%= record.link %>" download><%=record.name%></a>
+                            <% } %>
+
+                        </td>
+                        <td>hello</td>
+                        <td><% if( record.isFolder ){ %>
+                                ---
+                            <% }else{ %>
+                                0 KB
+                            <% } %>
+                        </td>
+                        <td><% if( record.isFolder ){ %>
+                                Folder
+                            <% }else{
+                                var temp  = record.name.split(".")[record.name.split(".").length -1]; //확장자만 따온다
+                                var type =  getFileType(temp);
+                                %>
+                                <%= type %>
+                            <% } %>
+                        </td>
+                        <td>
+                            <button type="button" class="btn btn-primary btn-xs" onclick="removeItem($(this))">Remove</button>
+                        </td>
+                    </tr>
+                <%})%>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<script>
+    function removeItem($dom){
+        var value = $dom.parent().parent().children('.fileName').attr('value');
+        $.ajax({
+            url: '/remove',
+            type: 'DELETE',
+            data: {item: value},
+            dataType: 'json',
+            success: function(result){
+                if(result.success){
+                    /*
+                    * 일반적인 다시 읽기
+                     window.location.reload();
+                     이렇게 하면 컴퓨터의 캐쉬에서 우선 파일을 찾아봅니다. 없으면 서버에서 받아옵니다.
+
+                     적극적인 다시 읽기
+                     window.location.reload(true);
+                     true 라는 파라미터를 입력하면, 무조건 서버에서 직접 파일을 가져 오게 됩니다. 캐쉬는 완전히 무시됩니다.
+                    *
+                    * */
+                    location.reload(true);
+                }
+            }
+        })
+    }
+</script>
+</body>
+</html>
+<%
+ function getFileType(value){
+     switch(value){
+         case 'txt':
+             return 'Text File'
+         case 'hwp':
+             return 'Hangul File'
+         default :
+             return value + ' File';
+     }
+ }
+
+
+    %>
