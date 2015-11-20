@@ -3,39 +3,56 @@ var express = require('express'),
     path = require('path'),
     app = express();
 
-app.use('/down', express.static(__dirname));
+
+app.get('/', function(req, res){
+    res.redirect('/get/');
+});
 
 app.get('/get/*', function(req,res){
+
     var tmp_file = '',
         tmp_folder = '',
         ids = req.params,
-        dir = '';
+        dir = '',
+        shared_folder = path.join(__dirname, 'shared'),
+        list = {};
 
-    for(var i in ids){
-        dir = path.join(dir, ids[i]);
-    }
+    dir = path.join( ids[0] );
 
-    if(!fs.statSync(dir).isDirectory())
-        return;
+    if(!fs.statSync( path.join(shared_folder, dir)).isDirectory())
+        res.error({err: 'No directory'});
 
-    fs.readdir(path.join(__dirname,dir), function(err, files){
+    fs.readdir( path.join( shared_folder, dir), function(err, files){
         if(!!err){
             console.log(err);
+            res.error({err:err.message});
         }else{
+            var parent = dir != '.' ?  '<a href="/get/' +  path.normalize(path.join(dir,'..'))+'">[..]</a><br/>' : '';
+
             for(var i in files){
                 var file = files[i];
-                var stats = fs.statSync(path.join(dir, file));
 
+                var stats = fs.statSync(path.join(shared_folder, dir, file) );
                 if(stats.isFile()){
-                    tmp_file += '<a href="/down/'+path.join(dir,file)+'">'+file+'</a><br/>';
+                    tmp_file += '<a href="/down/'+path.join(dir,file)+'" download>'+file+'</a><br/>';
                 }else{
                     tmp_folder +='<a href="/get/'+path.join(dir,file)+'">['+file+']</a><br/>';
                 }
             }
-            res.send(tmp_folder + tmp_file );
+
+            res.send(parent + tmp_folder + tmp_file );
         }
     });
 });
+
+//app.use('/down', express.static(__dirname));
+app.get('/down/*', function(req, res){
+    var shared_folder = path.join(__dirname, 'shared');
+    var file_path = req.params[0];
+
+    res.sendFile( path.join( shared_folder,  file_path ));
+});
+
 
 app.listen(55555, function(){
     console.log('This server server is running on the port ' + this.address().port);
