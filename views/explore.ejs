@@ -4,19 +4,47 @@
     <meta charset="UTF-8">
     <title></title>
     <script src="/js/jquery-1.11.3.min.js"></script>
-    <!-- Latest compiled and minified CSS -->
-    <script src="http://code.jquery.com/jquery-1.11.3.min.js"></script>
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
-
     <!-- Latest compiled and minified JavaScript -->
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+    <script src="/js/socket.io-1.3.6.js"></script>
 </head>
 <body>
-
+<style>
+    div.bs-callout-info {
+        display: block;
+        border-left-color: #1b809e;
+        width: 60%;
+    }
+    div.bs-callout-info h4 {
+        color: #1b809e;
+    }
+    .bs-callout {
+        padding: 20px;
+        margin: 20px 0;
+        border: 1px solid #eee;
+        border-left-width: 5px;
+        border-radius: 3px;
+    }
+</style>
 <div class="container bs-docs-container">
     <div class="row">
         <div class="col-md-9">
-            <h1 class="page-header">KSA File Explorer</h1>
+            <!--<h1 class="page-header">KSA File Explorer</h1>-->
+            <button type="button" class="btn btn-primary" id="OpenUploadArea">File Upload</button>
+
+            <div class="bs-callout bs-callout-info hide" id="UploadBox">
+                <h4>File Upload</h4>
+                 <span id='UploadArea'>
+                     <p>
+                         <label for="FileBox">Choose A File: </label><input type="file" id="FileBox"><br>
+                         <label for="NameBox">Name: </label><input type="text" id="NameBox" style="width:100%"><br>
+                     </p>
+                     <button type='button' id='UploadButton' class='btn btn-info'>Upload</button>
+                     <button type="button" class="btn btn-warning" id="CloseUploadArea">Close</button>
+               </span>
+            </div>
+
             <table class="table table-striped">
                 <thead>
                 <tr>
@@ -38,11 +66,11 @@
                             <% } %>
 
                         </td>
-                        <td>hello</td>
+                        <td> <%= record.mtime%></td>
                         <td><% if( record.isFolder ){ %>
                                 ---
                             <% }else{ %>
-                                0 KB
+                                <%=record.size%> KB
                             <% } %>
                         </td>
                         <td><% if( record.isFolder ){ %>
@@ -89,6 +117,80 @@
             }
         })
     }
+</script>
+
+<script>
+    if(window.File && window.FileReader){ //These are the relevant HTML5 objects that we are going to use
+        $('#UploadButton').on('click', StartUpload);
+        $('#FileBox').on('change', FileChosen);
+    }
+    else
+    {
+        document.getElementById('UploadArea').innerHTML = "Your Browser Doesn't Support The File API Please Update Your Browser";
+    }
+
+    var SelectedFile;
+    function FileChosen(event) {
+        SelectedFile = event.target.files[0];
+        document.getElementById('NameBox').value = SelectedFile.name;
+    }
+    var Path = window.location.host;
+    var socket = io.connect(Path);
+    var FReader;
+    var Name;
+    function StartUpload(){
+        if(document.getElementById('FileBox').value != "")
+        {
+            FReader = new FileReader();
+            Name = $('#NameBox').val();
+            var Content = "<span id='NameArea'>Uploading " + SelectedFile.name + " as " + Name + "</span>";
+            Content += '<div class="progress"><div class="progress-bar" id="progressbar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%;">0% </div> </div>';
+            Content += "<span id='Uploaded'> - <span id='MB'>0</span>/" + Math.round(SelectedFile.size / 1048576) + "MB</span>";
+            document.getElementById('UploadArea').innerHTML = Content;  //기존에 있던 파일 선택창과 name 박스를 삭제하고 업로드 상황으로 바꾼다
+            FReader.onload = function(evnt){  //load 이벤트 핸들러. 이 이벤트는 읽기 동작이 성공적으로 완료 되었을 때 마다 발생합니다.
+                socket.emit('Upload', { 'Name' : Name, Data : evnt.target.result });
+            };
+            socket.emit('Start', { 'Name' : Name, 'Size' : SelectedFile.size, 'Pathname' : window.location.pathname });
+        }
+        else
+        {
+            alert("Please Select A File");
+        }
+    }
+    socket.on('Done', function (data){
+        var Content = "Video Successfully Uploaded !!";
+//            Content += "<img id='Thumb' src='" + data['Image'] + "' alt='" + Name + "'><br>";
+        Content += "<button  type='button' name='Upload' value='' id='Restart' class='Button'>Upload Another</button>";
+        document.getElementById('UploadArea').innerHTML = Content;
+        document.getElementById('Restart').addEventListener('click', Refresh);
+    });
+    function Refresh(){
+        location.reload(true);
+    }
+    socket.on('MoreData', function (data){
+        UpdateBar(data['Percent']);
+        var Place = data['Place'] * 524288; //The Next Blocks Starting Position
+        var NewFile = SelectedFile.slice(Place, Place + Math.min(524288, (SelectedFile.size-Place)));  //The Variable that will hold the new Block of Data
+        FReader.readAsBinaryString(NewFile);   // FReader.onload 이벤트 참조
+    });
+    function UpdateBar(percent){
+        $('#progressbar').attr('aria-valuenow', Math.round(percent));
+        $('#progressbar').css('width', Math.round(percent) + '%');
+        $('#progressbar').html((Math.round(percent*100)/100) + '%');
+        var MBDone = Math.round(((percent/100.0) * SelectedFile.size) / 1048576);
+        document.getElementById('MB').innerHTML = MBDone;
+    }
+
+    $('#OpenUploadArea').click(function(){
+        $('#UploadBox').removeClass('hide');
+        $('#OpenUploadArea').addClass('hide');
+    });
+
+    $('#CloseUploadArea').click(function() {
+        $('#OpenUploadArea').removeClass('hide');
+        $('#UploadBox').addClass('hide');
+    })
+
 </script>
 </body>
 </html>

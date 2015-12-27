@@ -38,16 +38,17 @@ app.get('/get/*', function(req,res){
             res.error({err:err.message});
         }else{
             if( dir != '.' )
-                list_folders.push({isFolder: true, link: path.normalize( path.join(dir,'..') ), name: '..'});
+                list_folders.push({isFolder: true, link: path.normalize( path.join(dir,'..') ), name: '..', mtime: '---'});
 
             for(var i in files){
                 var file = files[i];
 
                 var stats = fs.statSync(path.join(shared_folder, dir, file) );
                 if(stats.isFile()){
-                    list_files.push( {isFolder: false, link: path.join(dir,file), name: file } );
+                    list_files.push( {isFolder: false, link: path.join(dir,file), name: file, mtime: stats.mtime, size: stats.size>>10} );
                 }else{
-                    list_folders.push( {isFolder: true, link:path.join(dir,file), name: file })
+
+                    list_folders.push( {isFolder: true, link:path.join(dir,file), name: file, mtime: stats.mtime})
                 }
             }
 
@@ -87,6 +88,90 @@ app.delete('/remove', function(req, res){
 
     //fs.unlink()
 });
-app.listen(55555, function(){
+var server = app.listen(55555, function(){
     console.log('This server server is running on the port ' + this.address().port);
+});
+
+
+var io = require('socket.io').listen(server);
+
+var Files = [];
+
+app.use(express.static(__dirname));
+
+
+io.sockets.on('connection', function (socket) {
+
+    socket.on('Start', function (data) { //data contains the variables that we passed through in the html file
+        var Name = data['Name'];
+        Files[Name] = {  //Create a new Entry in The Files Variable
+            FileSize : data['Size'],
+            Data     : "",              //buffer
+            Downloaded : 0,
+            Pathname: data['Pathname']
+        };
+
+        var Place = 0;
+        try{
+            var stat = fs.statSync('Temp/' +  Name);
+            if(stat.isFile())
+            {
+                Files[Name]['Downloaded'] = stat.size;
+                Place = stat.size / 524288;
+            }
+        }
+        catch(er){} //It's a New File
+        fs.open("Temp/" + Name, "a", 0755, function(err, fd){
+            if(err)
+            {
+                console.log(err);
+            }
+            else
+            {
+                Files[Name]['Handler'] = fd; //We store the file handler so we can write to it later
+                socket.emit('MoreData', { 'Place' : Place, Percent : 0 });
+            }
+        });
+    });
+
+    socket.on('Upload', function (data){
+        var Name = data['Name'];
+        Files[Name]['Downloaded'] += data['Data'].length;
+        Files[Name]['Data'] += data['Data'];
+        if(Files[Name]['Downloaded'] == Files[Name]['FileSize']) //If File is Fully Uploaded
+        {
+            fs.write(Files[Name]['Handler'], Files[Name]['Data'], null, 'Binary', function(err, Written){
+                //Get Thumbnail Here
+                var readS = fs.createReadStream("Temp/" + Name);
+                var writeS = fs.createWriteStream( path.join(__dirname, 'shared', Files[Name]['Pathname'].substring(4), Name) );
+                //File[Name]['Pathname'] 은 /get/test_folder 와 같이 경로명에 /get이 붙어있으므로 이를 제거
+
+                readS.pipe(writeS);  //https://groups.google.com/forum/#!msg/nodejs/YWQ1sRoXOdI/3vDqoTazbQQJ
+
+                readS.on('end', function(){
+                    //Operation done
+                    fs.unlink("Temp/" + Name, function () { //This Deletes The Temporary File
+
+                        socket.emit('Done');
+                    });
+                });
+            });
+        }
+        else if(Files[Name]['Data'].length > 10485760){ //If the Data Buffer reaches 10MB
+            fs.write(Files[Name]['Handler'], Files[Name]['Data'], null, 'Binary', function(err, writen){
+                Files[Name]['Data'] = ""; //Reset The Buffer
+                var Place = Files[Name]['Downloaded'] / 524288;
+                var Percent = (Files[Name]['Downloaded'] / Files[Name]['FileSize']) * 100;
+                socket.emit('MoreData', { 'Place' : Place, 'Percent' :  Percent});
+            });
+        }
+        else
+        {
+            var Place = Files[Name]['Downloaded'] / 524288;
+            var Percent = (Files[Name]['Downloaded'] / Files[Name]['FileSize']) * 100;
+            socket.emit('MoreData', { 'Place' : Place, 'Percent' :  Percent});
+        }
+    });
+
+
 });
